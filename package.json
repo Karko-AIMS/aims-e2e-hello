@@ -1,0 +1,33 @@
+{
+  "name": "aims-e2e-hello",
+  "private": true,
+  "scripts": {
+    "dc:dev:up": "docker compose -f docker-compose.dev.yml up",
+    "dc:dev:up:build": "docker compose -f docker-compose.dev.yml up --build",
+    "dc:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "dc:dev:down:volumes": "docker compose -f docker-compose.dev.yml down -v",
+    "dc:dev:restart": "docker compose -f docker-compose.dev.yml down && docker compose -f docker-compose.dev.yml up --build",
+    "dc:dev:logs": "docker compose -f docker-compose.dev.yml logs -f",
+    "dc:dev:ps": "docker compose -f docker-compose.dev.yml ps",
+    "dc:dev:backend:logs": "docker compose -f docker-compose.dev.yml logs -f backend",
+    "dc:dev:gateway:logs": "docker compose -f docker-compose.dev.yml logs -f gateway",
+    "dc:dev:db:logs": "docker compose -f docker-compose.dev.yml logs -f postgres",
+
+    "dc:prod:pull": "docker compose -f docker-compose.prod.yml --env-file .env pull",
+    "dc:prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d",
+    "dc:prod:up:build": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "dc:prod:down": "docker compose -f docker-compose.prod.yml --env-file .env down",
+    "dc:prod:restart": "docker compose -f docker-compose.prod.yml --env-file .env down && docker compose -f docker-compose.prod.yml --env-file .env up -d",
+    "dc:prod:up:pull": "docker compose -f docker-compose.prod.yml --env-file .env pull && docker compose -f docker-compose.prod.yml --env-file .env up -d",
+    "dc:prod:logs": "docker compose -f docker-compose.prod.yml --env-file .env logs -f",
+    "dc:prod:ps": "docker compose -f docker-compose.prod.yml --env-file .env ps",
+    "dc:prod:backend:logs": "docker compose -f docker-compose.prod.yml --env-file .env logs -f backend",
+    "dc:prod:gateway:logs": "docker compose -f docker-compose.prod.yml --env-file .env logs -f gateway",
+    "dc:prod:db:logs": "docker compose -f docker-compose.prod.yml --env-file .env logs -f postgres",
+
+    "dc:default:up": "docker compose up",
+    "dc:default:down": "docker compose down",
+    "dc:default:logs": "docker compose logs -f",
+    "dc:default:ps": "docker compose ps"
+  }
+}
