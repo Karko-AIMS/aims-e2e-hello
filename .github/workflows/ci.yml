@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  hello-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install gateway dependencies
+        working-directory: gateway
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      # lint/test 스크립트가 아직 없으면 잠시 주석 처리하거나 삭제
+      # - name: Lint gateway
+      #   working-directory: gateway
+      #   run: npm run lint
+      #
+      # - name: Lint backend
+      #   working-directory: backend
+      #   run: npm run lint
+      #
+      # - name: Unit test gateway
+      #   working-directory: gateway
+      #   run: npm test
+      #
+      # - name: Unit test backend
+      #   working-directory: backend
+      #   run: npm test
+
+      - name: Prepare CI env file
+        run: |
+          cat > .env <<'EOF'
+          NODE_ENV=test
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=aims
+          DB_USER=aims
+          DB_PASSWORD=aims
+          BACKEND_PORT=8080
+          BACKEND_URL=http://backend:8080
+          TCP_PORT=9000
+          IMAGE_TAG=ci
+          EOF
+
+      - name: Build images
+        run: docker compose -f docker-compose.dev.yml build
+
+      - name: Start services
+        run: docker compose -f docker-compose.dev.yml up -d
+
+      - name: Wait for backend health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8080/health; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            echo "Waiting for backend..."
+            sleep 2
+          done
+          echo "Backend did not become ready in time"
+          docker compose -f docker-compose.dev.yml logs
+          exit 1
+
+      - name: Send HELLO over TCP
+        run: |
+          node - <<'EOF'
+          const net = require("net");
+
+          const msg =
+            JSON.stringify({
+              type: "HELLO",
+              vehicle_id: "CI-001",
+              firmware_version: "ci-test",
+              timestamp: "2026-03-09T12:00:00+09:00"
+            }) + "\n";
+
+          const client = net.createConnection({ host: "127.0.0.1", port: 9000 }, () => {
+            client.write(msg);
+            client.end();
+          });
+
+          client.on("error", (err) => {
+            console.error("TCP send failed:", err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Wait for DB insert
+        run: |
+          for i in {1..20}; do
+            COUNT=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+              psql -U aims -d aims -t -A \
+              -c "select count(*) from hello_messages where vehicle_id='CI-001';")
+            if [ "$COUNT" = "1" ]; then
+              echo "HELLO row inserted"
+              exit 0
+            fi
+            echo "Waiting for DB insert..."
+            sleep 2
+          done
+
+          echo "HELLO row was not inserted"
+          docker compose -f docker-compose.dev.yml logs
+          exit 1
+
+      - name: Show inserted rows
+        if: always()
+        run: |
+          docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -U aims -d aims \
+            -c "select id, vehicle_id, firmware_version, ts, created_at from hello_messages order by id desc limit 10;"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v
