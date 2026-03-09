@@ -1,5 +1,7 @@
 const net = require("net");
 const axios = require("axios");
+const { consumeChunk, safeJsonParse } = require("./src/parser");
+const { getForwardPath } = require("./src/handler");
 
 const tcpPort = parseInt(process.env.TCP_PORT || "9000", 10);
 const backendUrl = process.env.BACKEND_URL || "http://backend:8080";
@@ -17,38 +19,32 @@ const server = net.createServer((socket) => {
   let buffer = "";
 
   socket.on("data", async (chunk) => {
-    buffer += chunk;
+    const parsedChunk = consumeChunk(buffer, chunk);
+    buffer = parsedChunk.buffer;
 
-    // newline-delimited 처리
-    while (true) {
-      const idx = buffer.indexOf("\n");
-      if (idx === -1) break;
-
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-
-      if (!line) continue;
-
-      let msg;
-      try {
-        msg = JSON.parse(line);
-      } catch (e) {
+    for (const line of parsedChunk.lines) {
+      const parsedLine = safeJsonParse(line);
+      if (!parsedLine.ok) {
         log("Invalid JSON from", remote, line);
         continue;
       }
 
-      if (msg.type === "HELLO") {
-        try {
-          await axios.post(`${backendUrl}/ingest/hello`, msg, { timeout: 3000 });
-          log("Forwarded HELLO", msg.vehicle_id);
-          socket.write(`OK\n`);
-        } catch (e) {
-          log("Failed to forward HELLO", e.message);
-          socket.write(`ERR\n`);
-        }
-      } else {
+      const msg = parsedLine.value;
+      const forwardPath = getForwardPath(msg);
+
+      if (!forwardPath) {
         log("Ignoring non-HELLO type", msg.type);
-        socket.write(`IGNORED\n`);
+        socket.write("IGNORED\n");
+        continue;
+      }
+
+      try {
+        await axios.post(`${backendUrl}${forwardPath}`, msg, { timeout: 3000 });
+        log("Forwarded HELLO", msg.vehicle_id);
+        socket.write("OK\n");
+      } catch (e) {
+        log("Failed to forward HELLO", e.message);
+        socket.write("ERR\n");
       }
     }
   });

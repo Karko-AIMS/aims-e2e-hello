@@ -4,9 +4,14 @@
   "main": "gateway.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node gateway.js"
+    "start": "node gateway.js",
+    "test": "npm run test:unit",
+    "test:unit": "jest tests --runInBand"
   },
   "dependencies": {
     "axios": "^1.7.4"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }

@@ -7,8 +7,112 @@ on:
     branches: [main]
 
 jobs:
+  gateway-unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install gateway dependencies
+        working-directory: gateway
+        run: npm ci
+
+      - name: Run gateway unit tests
+        working-directory: gateway
+        run: npm run test:unit
+
+  backend-unit:
+    runs-on: ubuntu-latest
+    needs: gateway-unit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend unit tests
+        working-directory: backend
+        run: npm run test:unit
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    needs: backend-unit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Prepare CI env file
+        run: |
+          cat > .env <<'EOF'
+          NODE_ENV=test
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=aims
+          DB_USER=aims
+          DB_PASSWORD=aims
+          BACKEND_PORT=8080
+          BACKEND_URL=http://backend:8080
+          TCP_PORT=9000
+          IMAGE_TAG=ci
+          EOF
+
+      - name: Start postgres for integration test
+        run: docker compose -f docker-compose.dev.yml up -d postgres
+
+      - name: Wait for postgres health
+        run: |
+          for i in {1..30}; do
+            if docker compose -f docker-compose.dev.yml exec -T postgres \
+              pg_isready -U aims -d aims >/dev/null 2>&1; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"
+          docker compose -f docker-compose.dev.yml logs
+          exit 1
+
+      - name: Run backend integration tests
+        working-directory: backend
+        run: DATABASE_URL=postgres://aims:aims@127.0.0.1:5432/aims npm run test:int
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs || true
+
+      - name: Tear down integration stack
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v
+
   hello-e2e:
     runs-on: ubuntu-latest
+    needs: backend-integration
 
     steps:
       - name: Checkout
@@ -26,23 +130,6 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
-
-      # lint/test 스크립트가 아직 없으면 잠시 주석 처리하거나 삭제
-      # - name: Lint gateway
-      #   working-directory: gateway
-      #   run: npm run lint
-      #
-      # - name: Lint backend
-      #   working-directory: backend
-      #   run: npm run lint
-      #
-      # - name: Unit test gateway
-      #   working-directory: gateway
-      #   run: npm test
-      #
-      # - name: Unit test backend
-      #   working-directory: backend
-      #   run: npm test
 
       - name: Prepare CI env file
         run: |
@@ -126,11 +213,11 @@ jobs:
         run: |
           docker compose -f docker-compose.dev.yml exec -T postgres \
             psql -U aims -d aims \
-            -c "select id, vehicle_id, firmware_version, ts, created_at from hello_messages order by id desc limit 10;"
+            -c "select id, vehicle_id, firmware_version, ts, created_at from hello_messages order by id desc limit 10;" || true
 
       - name: Show service logs on failure
         if: failure()
-        run: docker compose -f docker-compose.dev.yml logs
+        run: docker compose -f docker-compose.dev.yml logs || true
 
       - name: Tear down
         if: always()
