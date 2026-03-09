@@ -8,6 +8,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 COPY gateway.js ./
+COPY src ./src
 
 EXPOSE 9000
 
