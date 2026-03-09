@@ -2,33 +2,35 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: aims
-      POSTGRES_PASSWORD: aims
-      POSTGRES_DB: aims
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgres://aims:aims@postgres:5432/aims
-      PORT: 8080
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      PORT: ${BACKEND_PORT}
     depends_on:
       - postgres
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
 
   gateway:
     build: ./gateway
     environment:
-      TCP_PORT: 9000
-      BACKEND_URL: http://backend:8080
+      NODE_ENV: ${NODE_ENV}
+      TCP_PORT: ${TCP_PORT}
+      BACKEND_URL: ${BACKEND_URL}
     depends_on:
       - backend
     ports:
-      - "9000:9000"
+      - "${TCP_PORT}:${TCP_PORT}"
 
 volumes:
   pgdata:
