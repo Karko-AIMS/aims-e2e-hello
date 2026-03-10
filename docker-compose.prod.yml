@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-    ports:
-      - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,9 +13,10 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+    restart: unless-stopped
 
   backend:
-    build: ./backend
+    image: ghcr.io/karko-aims/aims-e2e-hello-backend:${IMAGE_TAG}
     environment:
       NODE_ENV: ${NODE_ENV}
       DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
@@ -27,9 +26,10 @@ services:
         condition: service_healthy
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
+    restart: unless-stopped
 
   gateway:
-    build: ./gateway
+    image: ghcr.io/karko-aims/aims-e2e-hello-gateway:${IMAGE_TAG}
     environment:
       NODE_ENV: ${NODE_ENV}
       TCP_PORT: ${TCP_PORT}
@@ -38,6 +38,7 @@ services:
       - backend
     ports:
       - "${TCP_PORT}:${TCP_PORT}"
+    restart: unless-stopped
 
 volumes:
   pgdata:
